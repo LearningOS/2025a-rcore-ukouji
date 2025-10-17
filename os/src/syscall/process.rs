@@ -4,6 +4,8 @@ use crate::{
     timer::get_time_us,
 };
 
+use crate::trace::get_syscall;
+
 #[repr(C)]
 #[derive(Debug)]
 pub struct TimeVal {
@@ -38,8 +40,21 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     0
 }
 
-// TODO: implement the syscall
-pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
+pub unsafe fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
     trace!("kernel: sys_trace");
-    -1
+    unsafe {
+        match _trace_request {
+            0 => {
+                // read *_id as isize
+                *(_id as *const u8) as isize
+            },
+            1 => {
+                // *_id = _data
+                (_id as *mut u8).write_volatile(_data as u8);
+                0
+            },
+            2 => get_syscall(_id) as isize,
+            _ => panic!("Unsupported trace request!"),
+        }
+    }
 }

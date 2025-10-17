@@ -89,6 +89,10 @@ impl TaskManager {
         }
         panic!("unreachable in run_first_task!");
     }
+    fn get_current_task_id(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        return inner.current_task;
+    }
 
     /// Change the status of current `Running` task into `Ready`.
     fn mark_current_suspended(&self) {
@@ -168,4 +172,9 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// Get current task running ID
+pub fn get_current_task_id() -> usize {
+    TASK_MANAGER.get_current_task_id()
 }
