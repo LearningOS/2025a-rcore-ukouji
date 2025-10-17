@@ -2,7 +2,7 @@ use crate::task::get_current_task_id;
 use crate::config::MAX_APP_NUM;
 use crate::syscall::{SYSCALL_TRACE, SYSCALL_EXIT, SYSCALL_WRITE, SYSCALL_YIELD, SYSCALL_GET_TIME};
 
-static mut __TRACE: [[usize; 5]; 16] =  [[0 as usize; 5]; MAX_APP_NUM];
+static mut __TRACE: [[usize; 6]; MAX_APP_NUM] =  [[0 as usize; 6]; MAX_APP_NUM];
 
 fn get_internal_id_from_syscall(syscall: usize) -> usize {
     match syscall{
