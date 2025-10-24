@@ -152,7 +152,7 @@ impl PageTable {
         self.find_pte(vpn).map(|pte| *pte)
     }
     /// get the token from the page table
-    pub fn token(&self) -> usize {
+    pub fn get_satp_token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
     }
 }

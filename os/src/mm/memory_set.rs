@@ -49,7 +49,80 @@ impl MemorySet {
     }
     /// Get the page table token
     pub fn token(&self) -> usize {
-        self.page_table.token()
+        self.page_table.get_satp_token()
+    }
+    /// Detecting any possible overlaps for given mem range and existing mem maps
+    pub fn detect_overlap(&self, start_va: VirtAddr, end_va:VirtAddr) -> bool {
+        if start_va > end_va {
+            return true;
+        }
+        for area in self.areas.iter() {
+            if area.check_overlap(start_va, end_va) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn user_perm_to_map_perm(perm: usize) -> MapPermission{
+        let mut map_perm = MapPermission::U;
+        if perm & 1 == 1 {
+            map_perm = map_perm | MapPermission::R;
+        }
+        if (perm >> 1) & 1 == 1 {
+            map_perm = map_perm | MapPermission::W;
+        }
+        if (perm >> 2) & 1 == 1 {
+            map_perm = map_perm | MapPermission::X;
+        }
+        map_perm
+    }
+    /// Mapping additional contiguous range with given start_va and len
+    pub fn map(
+        &mut self,
+        start_va: usize, len: usize,
+        perm :usize
+    ) -> isize {
+        let sva: VirtAddr = start_va.into();
+        let eva: VirtAddr = (start_va + len).into();
+        let map_perm = Self::user_perm_to_map_perm(perm);
+        self.insert_framed_area(sva, eva, map_perm)
+    }
+    /// Unmapping a memory region
+    pub fn unmap(&mut self, start_va: usize, len: usize) -> isize {
+        let sva: VirtAddr = start_va.into();
+        let eva: VirtAddr = (start_va + len).into();
+        let this = VPNRange::new(
+            VirtPageNum::from(sva), VirtPageNum::from(eva));
+        if let Some(index) = self.areas.iter().position(
+            |area| area.contains(sva, eva)
+        ) {
+            let area = &self.areas[index];
+            if area.vpn_range == this {
+                // exact match: drop the MapArea after unmapping it
+                let area = &mut self.areas[index];
+                area.unmap(&mut self.page_table);
+            } else {
+                // region is located at the end of current MapArea
+                if area.vpn_range.get_end() == this.get_end() {
+                    let end_va: usize = VirtAddr::from(area.vpn_range.get_end()).into();
+                    self.shrink_to(
+                        VirtAddr::from(area.vpn_range.get_start()),
+                        VirtAddr::from(end_va - len));
+                } else {
+                    trace!("unsupported unmapping area: trying to unmap {:?} from {:?}", this, area.vpn_range);
+                    return -1;
+                    /*
+                        Unsupported cases:
+                        area to be unmapped is in the head of middle of the MapArea
+                        Idea to this: we need to
+                     */
+                }
+            }
+            return 0;
+        }
+        // target not found
+        -1
     }
     /// Assume that no conflicts.
     pub fn insert_framed_area(
@@ -57,11 +130,17 @@ impl MemorySet {
         start_va: VirtAddr,
         end_va: VirtAddr,
         permission: MapPermission,
-    ) {
-        self.push(
-            MapArea::new(start_va, end_va, MapType::Framed, permission),
-            None,
-        );
+    ) -> isize {
+        if self.detect_overlap(start_va, end_va) {
+            trace!("detected memory overlap, giving up insertion");
+            -1
+        } else {
+            self.push(
+                MapArea::new(start_va, end_va, MapType::Framed, permission),
+                None,
+            );
+            0
+        }
     }
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
@@ -223,7 +302,7 @@ impl MemorySet {
     }
     /// Change page table by writing satp CSR Register.
     pub fn activate(&self) {
-        let satp = self.page_table.token();
+        let satp = self.page_table.get_satp_token();
         unsafe {
             satp::write(satp);
             asm!("sfence.vma");
@@ -355,6 +434,18 @@ impl MapArea {
             }
             current_vpn.step();
         }
+    }
+    /// checking memory range overlap
+    pub fn check_overlap(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let other = VPNRange::new(
+            VirtPageNum::from(start_va), VirtPageNum::from(end_va));
+        self.vpn_range.check_overlap(&other)
+    }
+    /// Checking if the specified memory region is contained with this area
+    pub fn contains(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let other = VPNRange::new(
+            VirtPageNum::from(start_va), VirtPageNum::from(end_va));
+        self.vpn_range.contains(&other)
     }
 }
 

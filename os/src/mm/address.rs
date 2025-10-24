@@ -204,7 +204,7 @@ impl StepByOne for VirtPageNum {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 /// a simple range structure for type T
 pub struct SimpleRange<T>
 where
@@ -226,6 +226,12 @@ where
     }
     pub fn get_end(&self) -> T {
         self.r
+    }
+    pub fn check_overlap(&self, other: &Self) -> bool {
+        other.l < self.r && other.r > self.l
+    }
+    pub fn contains(&self, other: &Self) -> bool {
+        self.l <= other.l && self.r >= other.r
     }
 }
 impl<T> IntoIterator for SimpleRange<T>

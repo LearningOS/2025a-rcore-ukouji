@@ -96,6 +96,17 @@ impl TaskControlBlock {
             None
         }
     }
+    /*
+    /// Getting immutable memory set of current task
+    pub fn get_memory_set(&self) -> &MemorySet {
+        &self.memory_set
+    }
+     */
+
+    /// Getting mutable memory set of current task
+    pub fn get_memory_set_mut(&mut self) -> &mut MemorySet {
+        &mut self.memory_set
+    }
 }
 
 #[derive(Copy, Clone, PartialEq)]

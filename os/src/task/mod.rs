@@ -133,6 +133,20 @@ impl TaskManager {
         inner.tasks[cur].change_program_brk(size)
     }
 
+    /// mapping a range to current process' address space
+    /// Assuming the sanity already checked from upper layer
+    pub fn mmap_current(&self, start_va:usize, len:usize, prot: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].memory_set.map(start_va,len, prot)
+    }
+    /// unmapping a memory area
+    pub fn munmap_current(&self, start_va:usize, len: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].memory_set.unmap(start_va, len)
+    }
+
     /// Switch current `Running` task to the task we have found,
     /// or there is no `Ready` task and we can exit with all applications completed
     fn run_next_task(&self) {
@@ -191,6 +205,15 @@ pub fn exit_current_and_run_next() {
 /// Get the current 'Running' task's token.
 pub fn current_user_token() -> usize {
     TASK_MANAGER.get_current_token()
+}
+
+/// Mapping address to current process' address space with given range
+pub fn mmap_current(start_va: usize, len: usize, prot: usize) -> isize {
+    TASK_MANAGER.mmap_current(start_va, len, prot)
+}
+/// unmapping an area
+pub fn munmap_current(start_va: usize, len: usize) -> isize {
+    TASK_MANAGER.munmap_current(start_va, len)
 }
 
 /// Get the current 'Running' task's trap contexts.
