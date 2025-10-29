@@ -93,7 +93,7 @@ impl MemorySet {
         let sva: VirtAddr = start_va.into();
         let eva: VirtAddr = (start_va + len).into();
         let this = VPNRange::new(
-            VirtPageNum::from(sva), VirtPageNum::from(eva));
+            sva.floor(), eva.ceil());
         if let Some(index) = self.areas.iter().position(
             |area| area.contains(sva, eva)
         ) {
@@ -102,6 +102,7 @@ impl MemorySet {
                 // exact match: drop the MapArea after unmapping it
                 let area = &mut self.areas[index];
                 area.unmap(&mut self.page_table);
+                self.areas.remove(index);
             } else {
                 // region is located at the end of current MapArea
                 if area.vpn_range.get_end() == this.get_end() {
@@ -110,7 +111,7 @@ impl MemorySet {
                         VirtAddr::from(area.vpn_range.get_start()),
                         VirtAddr::from(end_va - len));
                 } else {
-                    trace!("unsupported unmapping area: trying to unmap {:?} from {:?}", this, area.vpn_range);
+                    error!("unsupported unmapping area: trying to unmap {:?} from {:?}", this, area.vpn_range);
                     return -1;
                     /*
                         Unsupported cases:
@@ -132,7 +133,7 @@ impl MemorySet {
         permission: MapPermission,
     ) -> isize {
         if self.detect_overlap(start_va, end_va) {
-            trace!("detected memory overlap, giving up insertion");
+            info!("detected memory overlap, giving up insertion");
             -1
         } else {
             self.push(
@@ -438,13 +439,13 @@ impl MapArea {
     /// checking memory range overlap
     pub fn check_overlap(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
         let other = VPNRange::new(
-            VirtPageNum::from(start_va), VirtPageNum::from(end_va));
+            start_va.floor(), end_va.ceil());
         self.vpn_range.check_overlap(&other)
     }
     /// Checking if the specified memory region is contained with this area
     pub fn contains(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
         let other = VPNRange::new(
-            VirtPageNum::from(start_va), VirtPageNum::from(end_va));
+            start_va.floor(), end_va.ceil());
         self.vpn_range.contains(&other)
     }
 }

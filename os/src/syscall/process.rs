@@ -40,22 +40,22 @@ pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
 // YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _prot: usize) -> isize {
     if _start == 0 || _start & 0xfff != 0
-        || _len % 0x1000 != 0
         || _prot & 0x7 == 0 || _prot & !0x7 != 0 {
         trace!("reject to mmap start va:{:x}, len:{:x}, prot:{:x}", _start, _len, _prot);
         return -1;
     }
 
+    info!("Requesting to map addr={:x} with len={:x}", _start, _len);
     mmap_current(_start, _len, _prot)
 }
 
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    if _start == 0 || _start & 0xfff != 0 || _len % 0x1000 != 0 {
+    if _start == 0 || _start & 0xfff != 0 {
         trace!("reject to munmap start va:{:x}, len:{:x}", _start, _len);
         return -1;
     }
-
+    info!("Requesting to unmap addr={:x} with len={:x}", _start, _len);
     munmap_current(_start, _len)
 }
 /// change data segment size

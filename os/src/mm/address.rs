@@ -1,6 +1,6 @@
 //! Implementation of physical and virtual address and page number.
 use super::PageTableEntry;
-use crate::config::{PAGE_SIZE, PAGE_SIZE_BITS};
+use crate::{config::{PAGE_SIZE, PAGE_SIZE_BITS}};
 use core::fmt::{self, Debug, Formatter};
 /// physical address
 const PA_WIDTH_SV39: usize = 56;
@@ -228,6 +228,7 @@ where
         self.r
     }
     pub fn check_overlap(&self, other: &Self) -> bool {
+        info!("checking overlap b/w {:?} and {:?}", self, other);
         other.l < self.r && other.r > self.l
     }
     pub fn contains(&self, other: &Self) -> bool {
