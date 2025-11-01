@@ -23,6 +23,7 @@ use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
+use crate::mm::{MapPermission, MapType};
 
 /// The task manager, where all the tasks are managed.
 ///
@@ -138,13 +139,32 @@ impl TaskManager {
     pub fn mmap_current(&self, start_va:usize, len:usize, prot: usize) -> isize {
         let mut inner = self.inner.exclusive_access();
         let cur = inner.current_task;
-        inner.tasks[cur].memory_set.map(start_va,len, prot)
+        inner.tasks[cur].memory_set.map(start_va, len, MapType::Framed, MapPermission::from_user(prot))
+    }
+
+    /// Mapping a userspace address to kernel space for reading/writing
+    pub fn mmap_current_identical(&self, start_va:usize, len: usize, writable: bool) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+
+        inner.tasks[cur].memory_set.map(start_va, len, MapType::Identical,
+            match writable {
+                true => MapPermission::new(true, true, false, false),
+                false => MapPermission::new(true, false, false, false)
+            })
     }
     /// unmapping a memory area
     pub fn munmap_current(&self, start_va:usize, len: usize) -> isize {
         let mut inner = self.inner.exclusive_access();
         let cur = inner.current_task;
         inner.tasks[cur].memory_set.unmap(start_va, len)
+    }
+    /// Translating a user's virtual address to physical address
+    pub fn virt_to_phys(&self, addr:usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        // inner.tasks[cur].memory_set.print_memory_info();
+        inner.tasks[cur].memory_set.virt_look_up(addr.into()).into()
     }
 
     /// Switch current `Running` task to the task we have found,
@@ -221,7 +241,17 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
     TASK_MANAGER.get_current_trap_cx()
 }
 
+/// Mapping a userspace address to kernel space for reading/writing
+pub fn mmap_current_identical(start_va: usize, len: usize, writable: bool) -> isize {
+    TASK_MANAGER.mmap_current_identical(start_va, len, writable)
+}
+
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Converting userspace virtual address to physical address
+pub fn virt_to_phys(addr: usize) -> usize {
+    TASK_MANAGER.virt_to_phys(addr)
 }

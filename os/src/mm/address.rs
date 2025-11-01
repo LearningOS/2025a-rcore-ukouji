@@ -98,7 +98,6 @@ impl VirtAddr {
     pub fn floor(&self) -> VirtPageNum {
         VirtPageNum(self.0 / PAGE_SIZE)
     }
-
     /// Get the (ceil) virtual page number
     pub fn ceil(&self) -> VirtPageNum {
         VirtPageNum((self.0 - 1 + PAGE_SIZE) / PAGE_SIZE)
@@ -228,7 +227,7 @@ where
         self.r
     }
     pub fn check_overlap(&self, other: &Self) -> bool {
-        info!("checking overlap b/w {:?} and {:?}", self, other);
+        debug!("checking overlap b/w {:?} and {:?}", self, other);
         other.l < self.r && other.r > self.l
     }
     pub fn contains(&self, other: &Self) -> bool {

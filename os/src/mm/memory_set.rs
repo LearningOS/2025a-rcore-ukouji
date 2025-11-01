@@ -4,9 +4,7 @@ use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
-use crate::config::{
-    KERNEL_STACK_SIZE, MEMORY_END, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT_BASE, USER_STACK_SIZE,
-};
+use crate::config::{KERNEL_STACK_SIZE, MEMORY_END, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT_BASE, USER_STACK_SIZE};
 use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
@@ -64,29 +62,28 @@ impl MemorySet {
         false
     }
 
-    fn user_perm_to_map_perm(perm: usize) -> MapPermission{
-        let mut map_perm = MapPermission::U;
-        if perm & 1 == 1 {
-            map_perm = map_perm | MapPermission::R;
-        }
-        if (perm >> 1) & 1 == 1 {
-            map_perm = map_perm | MapPermission::W;
-        }
-        if (perm >> 2) & 1 == 1 {
-            map_perm = map_perm | MapPermission::X;
-        }
-        map_perm
-    }
     /// Mapping additional contiguous range with given start_va and len
-    pub fn map(
-        &mut self,
+    pub fn map(&mut self,
         start_va: usize, len: usize,
-        perm :usize
+        map_type: MapType, map_perm :MapPermission
     ) -> isize {
         let sva: VirtAddr = start_va.into();
         let eva: VirtAddr = (start_va + len).into();
-        let map_perm = Self::user_perm_to_map_perm(perm);
-        self.insert_framed_area(sva, eva, map_perm)
+        if self.detect_overlap(sva, eva) {
+            info!("detected memory overlap, giving up insertion");
+            return -1;
+        }
+        match map_type {
+            MapType::Framed => {
+                self.insert_framed_area(sva, eva, map_perm)
+            }
+            MapType::Identical => {
+                let map_area = MapArea::new(sva, eva, MapType::Identical, map_perm);
+                self.push(map_area, None);
+
+            }
+        }
+        0
     }
     /// Unmapping a memory region
     pub fn unmap(&mut self, start_va: usize, len: usize) -> isize {
@@ -125,24 +122,20 @@ impl MemorySet {
         // target not found
         -1
     }
+
     /// Assume that no conflicts.
     pub fn insert_framed_area(
         &mut self,
         start_va: VirtAddr,
         end_va: VirtAddr,
         permission: MapPermission,
-    ) -> isize {
-        if self.detect_overlap(start_va, end_va) {
-            info!("detected memory overlap, giving up insertion");
-            -1
-        } else {
-            self.push(
-                MapArea::new(start_va, end_va, MapType::Framed, permission),
-                None,
-            );
-            0
-        }
+    ) {
+        self.push(
+            MapArea::new(start_va, end_va, MapType::Framed, permission),
+            None,
+        );
     }
+
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {
@@ -342,6 +335,41 @@ impl MemorySet {
             false
         }
     }
+
+    fn check_vpn_validity(&self, vpn: VirtPageNum) -> bool {
+        if let Some(_area) = self.areas.iter().find(
+            |area| area.vpn_range.get_start().0 <= vpn.0 && area.vpn_range.get_end().0 > vpn.0
+        ) {
+            true
+        } else {
+            false
+        }
+    }
+    /// Perform a virt to phys translation with current memory set
+    pub fn virt_look_up(&self, va: VirtAddr) -> PhysAddr {
+        if !self.check_vpn_validity(va.floor()){
+            return 0.into();
+        }
+        if let Some(pte) = self.translate(va.floor()) {
+            if pte.ppn() == PhysPageNum(0) {
+                0.into()
+            } else {
+                pte.translate(va.page_offset())
+            }
+        } else {
+            0.into()
+        }
+    }
+    #[allow(unused)]
+    /// printing existing memory info for debugging
+    pub fn print_memory_info(&self) {
+        for area in self.areas.iter() {
+            for vpn in area.vpn_range {
+                let ppn = self.translate(vpn).unwrap().ppn();
+                    println!("VPN 0x{:x} mapped to PPN 0x{:x}", vpn.0, ppn.0);
+            }
+        }
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
@@ -453,7 +481,9 @@ impl MapArea {
 #[derive(Copy, Clone, PartialEq, Debug)]
 /// map type for memory set: identical or framed
 pub enum MapType {
+    /// Identical mapping, VA and PA are the same after the mapping, only used for kernelspace mapping
     Identical,
+    /// Framed mapping, VA and PA are different
     Framed,
 }
 
@@ -468,6 +498,41 @@ bitflags! {
         const X = 1 << 3;
         ///Accessible in U mode
         const U = 1 << 4;
+    }
+}
+
+impl MapPermission {
+    /// Converting an user prot to MapPerm
+    pub fn from_user(perm: usize) -> Self {
+        let mut map_perm = MapPermission::U;
+        if perm & 1 == 1 {
+            map_perm = map_perm | MapPermission::R;
+        }
+        if (perm >> 1) & 1 == 1 {
+            map_perm = map_perm | MapPermission::W;
+        }
+        if (perm >> 2) & 1 == 1 {
+            map_perm = map_perm | MapPermission::X;
+        }
+        map_perm
+    }
+    #[allow(non_snake_case)]
+    /// Creating a new map permission with specified bits
+    pub fn new(R:bool, W:bool, X:bool, U:bool) -> Self {
+        let mut map_perm = MapPermission::R;
+        if R == false {
+            map_perm = map_perm & !MapPermission::W;
+        }
+        if W {
+            map_perm = map_perm | MapPermission::W;
+        }
+        if X {
+            map_perm = map_perm | MapPermission::X;
+        }
+        if U {
+            map_perm = map_perm | MapPermission::U;
+        }
+        map_perm
     }
 }
 

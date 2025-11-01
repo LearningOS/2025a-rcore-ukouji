@@ -1,9 +1,10 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
+use crate::config::PAGE_SIZE_BITS;
 
 bitflags! {
     /// page table entry flags
@@ -69,6 +70,10 @@ impl PageTableEntry {
     /// The page pointered by page table entry is executable?
     pub fn executable(&self) -> bool {
         (self.flags() & PTEFlags::X) != PTEFlags::empty()
+    }
+    /// Getting a physical address with offset
+    pub fn translate(&self, offset: usize) -> PhysAddr {
+        ((self.ppn().0 << PAGE_SIZE_BITS ) + offset).into()
     }
 }
 
