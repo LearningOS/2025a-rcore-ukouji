@@ -336,18 +336,36 @@ impl MemorySet {
         }
     }
 
-    fn check_vpn_validity(&self, vpn: VirtPageNum) -> bool {
-        if let Some(_area) = self.areas.iter().find(
-            |area| area.vpn_range.get_start().0 <= vpn.0 && area.vpn_range.get_end().0 > vpn.0
+    fn find_area_by_vpn(&self, vpn: VirtPageNum) -> Option<&MapArea> {
+        if let Some(area) = self.areas.iter().find(
+            |area|
+                area.vpn_range.get_start().0 <= vpn.0 && area.vpn_range.get_end().0 > vpn.0
         ) {
-            true
+            Some(area)
         } else {
-            false
+            None
         }
     }
+
+    /// check permission on given memory address
+    #[allow(non_snake_case)]
+    pub fn check_perm(&self, addr: VirtAddr, R: bool, W: bool, X: bool) -> bool {
+        let vpn = addr.floor();
+        let perm = MapPermission::new(R, W, X, true);
+        if let Some(area) = self.find_area_by_vpn(vpn)
+        {
+            // found a region
+            if area.map_perm & perm == perm {
+                return true;
+            }
+        }
+        // given address is not mapped in current address space or lack essential permission
+        false
+    }
+
     /// Perform a virt to phys translation with current memory set
     pub fn virt_look_up(&self, va: VirtAddr) -> PhysAddr {
-        if !self.check_vpn_validity(va.floor()){
+        if !self.find_area_by_vpn(va.floor()).is_some(){
             return 0.into();
         }
         if let Some(pte) = self.translate(va.floor()) {
@@ -494,7 +512,7 @@ bitflags! {
         const R = 1 << 1;
         ///Writable
         const W = 1 << 2;
-        ///Excutable
+        ///Executable
         const X = 1 << 3;
         ///Accessible in U mode
         const U = 1 << 4;
@@ -519,9 +537,9 @@ impl MapPermission {
     #[allow(non_snake_case)]
     /// Creating a new map permission with specified bits
     pub fn new(R:bool, W:bool, X:bool, U:bool) -> Self {
-        let mut map_perm = MapPermission::R;
-        if R == false {
-            map_perm = map_perm & !MapPermission::W;
+        let mut map_perm = MapPermission::empty();
+        if R {
+            map_perm = map_perm | MapPermission::R;
         }
         if W {
             map_perm = map_perm | MapPermission::W;

@@ -40,7 +40,12 @@ unsafe fn copy_to_user(dst_uva: *mut u8, src_kva: *const u8, size: usize) -> usi
     while s < size {
         // Copy contents in a 4K page
         let nbytes = min(0x1000 - ((dst_uva + s) & 0xfff), size - s);
-        let dst = task::virt_to_phys(dst_uva + s);
+        let dst = dst_uva + s;
+        if !task::check_user_perm(dst, false, true, false) {
+            // we deny writing into an address that is not writable to current user
+            return s;
+        }
+        let dst = task::virt_to_phys(dst);
         if dst == 0 {
             return s;
         }
@@ -72,7 +77,12 @@ unsafe fn copy_from_user(dst_kva: *mut u8, src_uva: *const u8, size: usize) -> u
     while s < size {
         // Copy contents in a 4K page
         let nbytes = min(0x1000 - ((src_uva + s) & 0xfff), size - s);
-        let src = task::virt_to_phys(src_uva + s);
+        let src = src_uva + s;
+        if !task::check_user_perm(src, true, false, false) {
+            // we deny reading from an address that is not readable to current user
+            return s;
+        }
+        let src = task::virt_to_phys(src);
         if src == 0 {
             return s;
         }

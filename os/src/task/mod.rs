@@ -163,8 +163,15 @@ impl TaskManager {
     pub fn virt_to_phys(&self, addr:usize) -> usize {
         let inner = self.inner.exclusive_access();
         let cur = inner.current_task;
-        // inner.tasks[cur].memory_set.print_memory_info();
         inner.tasks[cur].memory_set.virt_look_up(addr.into()).into()
+    }
+
+    /// checking userspace's permission on given address
+    #[allow(non_snake_case)]
+    pub fn check_user_perm(&self, addr: usize, R:bool, W:bool, X:bool) -> bool {
+        let inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].memory_set.check_perm(addr.into(), R, W, X)
     }
 
     /// Switch current `Running` task to the task we have found,
@@ -254,4 +261,10 @@ pub fn change_program_brk(size: i32) -> Option<usize> {
 /// Converting userspace virtual address to physical address
 pub fn virt_to_phys(addr: usize) -> usize {
     TASK_MANAGER.virt_to_phys(addr)
+}
+
+#[allow(non_snake_case)]
+/// check if the given address is readable/writable/executable to userspace
+pub fn check_user_perm(addr: usize, R:bool, W:bool, X:bool) -> bool {
+    TASK_MANAGER.check_user_perm(addr, R, W, X)
 }
