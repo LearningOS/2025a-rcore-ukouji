@@ -155,7 +155,9 @@ pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
                 }
             }
         },
-        2 => todo!(),
+        2 => {
+            task::trace_current(_id, false) as isize
+        }
         _ => panic!("Unsupported trace request!"),
     }
 }

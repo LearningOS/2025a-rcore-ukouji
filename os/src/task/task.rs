@@ -1,4 +1,6 @@
 //! Types related to task management
+
+use alloc::vec::Vec;
 use super::TaskContext;
 use crate::config::TRAP_CONTEXT_BASE;
 use crate::mm::{
@@ -28,6 +30,9 @@ pub struct TaskControlBlock {
 
     /// Program break
     pub program_brk: usize,
+
+    /// array for storing syscall ID and frequency
+    pub trace_map: Vec<[usize; 2]>,
 }
 
 impl TaskControlBlock {
@@ -63,6 +68,7 @@ impl TaskControlBlock {
             base_size: user_sp,
             heap_bottom: user_sp,
             program_brk: user_sp,
+            trace_map: Vec::new(),
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
@@ -106,6 +112,25 @@ impl TaskControlBlock {
     /// Getting mutable memory set of current task
     pub fn get_memory_set_mut(&mut self) -> &mut MemorySet {
         &mut self.memory_set
+    }
+
+    /// tracing a syscall
+    pub fn trace(&mut self, syscall_id: usize, set: bool) -> usize {
+        if let Some(m) = self.trace_map
+            .iter_mut()
+            .find(|arr| arr[0] == syscall_id) {
+            if set {
+                m[1] += 1;
+            }
+            m[1]
+        } else {
+            if set {
+                self.trace_map.push([syscall_id, 1]);
+                1
+            } else {
+                0
+            }
+        }
     }
 }
 

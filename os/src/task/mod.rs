@@ -174,6 +174,14 @@ impl TaskManager {
         inner.tasks[cur].memory_set.check_perm(addr.into(), R, W, X)
     }
 
+    /// tracing a syscall
+    pub fn trace(&self, syscall_id: usize, set: bool) -> usize  {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        let val = inner.tasks[cur].trace(syscall_id, set);
+        val
+    }
+
     /// Switch current `Running` task to the task we have found,
     /// or there is no `Ready` task and we can exit with all applications completed
     fn run_next_task(&self) {
@@ -267,4 +275,9 @@ pub fn virt_to_phys(addr: usize) -> usize {
 /// check if the given address is readable/writable/executable to userspace
 pub fn check_user_perm(addr: usize, R:bool, W:bool, X:bool) -> bool {
     TASK_MANAGER.check_user_perm(addr, R, W, X)
+}
+
+/// Tracing a syscall of current task
+pub fn trace_current(syscall_id: usize, set: bool) -> usize  {
+    TASK_MANAGER.trace(syscall_id, set)
 }
